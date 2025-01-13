@@ -2,7 +2,6 @@ import wx
 from openai import OpenAI
 import threading
 import os
-import time  # 用于模拟逐字输出的延时
 
 # 环境变量中获取 API 密钥
 openai_api_key = os.environ.get("OPENAI_API_KEY")
@@ -27,11 +26,58 @@ class TextCtrl(wx.Frame):
         self.text = ""
         self.turns = []
         panel = wx.Panel(self)
-        self.tex = wx.TextCtrl(panel, id=wx.ID_ANY, pos=(20, 20), size=(400, -1))
-        self.button = wx.Button(panel, -1, u"提交", pos=(435, 20))
-        self.Bind(wx.EVT_BUTTON, self.OnClick, self.button)
-        self.text1 = wx.TextCtrl(panel, pos=(20, 60), size=(500, 400), style=wx.TE_MULTILINE)
-        self.SetSize(540, 500)
+        
+        # ----------------------------- 标签和输入框 -------------------------------------------
+        # 使用 FlexGridSizer 创建布局
+        grid_sizer = wx.FlexGridSizer(rows=3, cols=2, vgap=10, hgap=10)
+        
+        theme_label = wx.StaticText(panel, label="主题：")
+        self.theme_input = wx.TextCtrl(panel, size=(550, -1))
+        
+        character_label = wx.StaticText(panel, label="性格：")
+        self.character_input = wx.TextCtrl(panel, size=(550, -1))
+        
+        setting_label = wx.StaticText(panel, label="设定：")
+        self.setting_input = wx.TextCtrl(panel, size=(550, -1))
+        
+        # 将组件添加到 sizer
+        grid_sizer.AddMany([
+            (theme_label, 0, wx.ALIGN_CENTER_VERTICAL), (self.theme_input, 1, wx.EXPAND),
+            (character_label, 0, wx.ALIGN_CENTER_VERTICAL), (self.character_input, 1, wx.EXPAND),
+            (setting_label, 0, wx.ALIGN_CENTER_VERTICAL), (self.setting_input, 1, wx.EXPAND),
+        ])
+
+        # -------------------------------创建选择菜单 和 按钮-----------------------------------------
+
+        # 选择菜单
+        self.content_type = wx.ComboBox(panel, choices=["故事大纲", "章节文本", ], pos=(20, 180))
+
+        # 按钮
+        self.generate_button = wx.Button(panel, label="生成")
+        self.generate_button.Bind(wx.EVT_BUTTON, self.on_generate)
+
+        # 添加选择菜单和按钮的水平布局
+        menu_button_sizer = wx.BoxSizer(wx.HORIZONTAL)
+
+        # 将选择菜单和按钮添加到水平布局
+        menu_button_sizer.Add(self.content_type, flag=wx.EXPAND | wx.RIGHT, border=10)  # 菜单在左，右侧留间距
+        menu_button_sizer.Add(self.generate_button, flag=wx.EXPAND)  # 按钮在右，占用剩余空间
+
+
+        # ------------------------------------- 结果显示框  -----------------------------------
+        self.result_text = wx.TextCtrl(panel, style=wx.TE_MULTILINE | wx.TE_READONLY, size=(400, 200))
+
+
+        # -------------------------------------  总布局  -------------------------------------
+        main_sizer = wx.BoxSizer(wx.VERTICAL)
+        main_sizer.Add(grid_sizer, flag=wx.ALL, border=10)
+        main_sizer.Add(menu_button_sizer, flag=wx.ALL | wx.EXPAND, border=10)  # 水平布局加入主布局
+        main_sizer.Add(self.result_text, flag=wx.ALL | wx.EXPAND, border=10, proportion=1)
+
+        panel.SetSizer(main_sizer)
+
+        # 窗口设置
+        self.SetSize(640, 500)
         self.SetTitle("Inspiration")
         self.Centre()
         self.Show(True)
@@ -41,8 +87,13 @@ class TextCtrl(wx.Frame):
         thread.start()
 
     def create_completion(self):
-        self.button.SetLabel("请等待...")
+        self.generate_button.SetLabel("请等待...")
         user_input = self.tex.GetValue()
+
+        # 获取用户输入
+        theme = self.theme_input.GetValue()
+        character = self.character_input.GetValue()
+        setting = self.setting_input.GetValue()
 
         # 构建 messages 列表
         messages = [
@@ -64,7 +115,7 @@ class TextCtrl(wx.Frame):
 
             self.turns.append(f"\n用户：{user_input}\n")
             self.turns.append("\nAI：")
-            wx.CallAfter(self.text1.SetValue, "".join(self.turns))  # 先显示用户的输入
+            wx.CallAfter(self.result_text.SetValue, "".join(self.turns))  # 先显示用户的输入
 
             for chunk in completion:
                 delta = chunk.choices[0].delta
@@ -72,10 +123,10 @@ class TextCtrl(wx.Frame):
                     content = delta.content
                     for char in content:
                         self.turns[-1] += char
-                        wx.CallAfter(self.text1.SetValue, "".join(self.turns))
+                        wx.CallAfter(self.result_text.SetValue, "".join(self.turns))
        
         except Exception as e:
-            wx.CallAfter(self.text1.SetValue, f"发生错误：{str(e)}")
+            wx.CallAfter(self.result_text.SetValue, f"发生错误：{str(e)}")
 
         finally:
             self.button.SetLabel("提交")
@@ -87,14 +138,14 @@ class TextCtrl(wx.Frame):
             self.text = "".join(self.turns[-10:])
 
     # 输入内容为空时禁止提交（弹出提示）
-    def OnClick(self, event):
+    def on_generate(self, event):
         if self.tex.GetValue() == "":
             toastone = wx.MessageDialog(None, "请输入内容", "提示", wx.YES_DEFAULT)
             if toastone.ShowModal() == wx.ID_YES:
                 toastone.Destroy()
             return
 
-        self.text1.SetValue(self.text)
+        self.result_text.SetValue(self.text)
         self.start_thread()
 
 
