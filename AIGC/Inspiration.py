@@ -26,6 +26,7 @@ class TextCtrl(wx.Frame):
         self.text = ""
         self.turns = []
         panel = wx.Panel(self)
+        self.panel = panel
         
         # ----------------------------- 标签和输入框 -------------------------------------------
         # 使用 FlexGridSizer 创建布局
@@ -50,7 +51,7 @@ class TextCtrl(wx.Frame):
             (setting_label, 0, wx.ALIGN_CENTER_VERTICAL), (self.setting_input, 1, wx.EXPAND),
         ])
 
-        # -------------------------------创建选择菜单 和 按钮-----------------------------------------
+        # -------------------------------创建选择菜单 和 按钮 和 输入框-----------------------------------------
 
         # 选择菜单
         self.content_type = wx.ComboBox(panel, choices=["故事大纲", "章节文本", ], pos=(20, 180))
@@ -58,13 +59,19 @@ class TextCtrl(wx.Frame):
         # 按钮
         self.generate_button = wx.Button(panel, label="生成")
         self.generate_button.Bind(wx.EVT_BUTTON, self.on_generate)
+        
+        # 创建右侧输入框，初始隐藏
+        self.dynamic_input = wx.TextCtrl(panel, size=(-1, -1))
+        self.dynamic_input.SetHint("请输入修改要求...")  # 提示输入
+        self.dynamic_input.Hide()  # 隐藏输入框
 
         # 添加选择菜单和按钮的水平布局
         menu_button_sizer = wx.BoxSizer(wx.HORIZONTAL)
 
         # 将选择菜单和按钮添加到水平布局
         menu_button_sizer.Add(self.content_type, flag=wx.EXPAND | wx.RIGHT, border=10)  # 菜单在左，右侧留间距
-        menu_button_sizer.Add(self.generate_button, flag=wx.EXPAND)  # 按钮在右，占用剩余空间
+        menu_button_sizer.Add(self.generate_button, flag=wx.EXPAND | wx.RIGHT, border=10)  # 按钮在中间
+        menu_button_sizer.Add(self.dynamic_input, flag=wx.EXPAND, proportion=1)  # 输入框在右，占用剩余空间
 
 
         # ------------------------------------- 结果显示框  -----------------------------------
@@ -155,10 +162,22 @@ class TextCtrl(wx.Frame):
                         wx.CallAfter(self.result_text.SetValue, "".join(self.turns[-1]))
        
         except Exception as e:
-            wx.CallAfter(self.result_text.SetValue, f"发生错误：{str(e)}")
+            print("发生错误：{str(e)}")
+            # wx.CallAfter(self.result_text.SetValue, f"发生错误：{str(e)}")
+            
 
         finally:
-            self.generate_button.SetLabel("修改？")
+            self.generate_button.SetLabel("修改")
+            self.dynamic_input.SetValue("")  # 清空输入框
+            
+            # 显示动态输入框
+            wx.CallAfter(self.dynamic_input.Show)
+            
+            # 聚焦到输入框 (闪退 弃用)
+            # self.dynamic_input.SetFocus()  
+            
+            # 刷新布局
+            wx.CallAfter(self.panel.Layout)  
 
         # 仅保留最近的 10 条对话记录
         if len(self.turns) <= 10:
