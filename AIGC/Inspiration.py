@@ -32,13 +32,16 @@ class TextCtrl(wx.Frame):
         grid_sizer = wx.FlexGridSizer(rows=3, cols=2, vgap=10, hgap=10)
         
         theme_label = wx.StaticText(panel, label="主题：")
-        self.theme_input = wx.TextCtrl(panel, size=(550, -1))
+        # self.theme_input = wx.TextCtrl(panel, size=(550, -1))
+        self.theme_input = wx.TextCtrl(panel, size=(550, -1), value="成长")
         
         character_label = wx.StaticText(panel, label="性格：")
-        self.character_input = wx.TextCtrl(panel, size=(550, -1))
+        # self.character_input = wx.TextCtrl(panel, size=(550, -1))
+        self.character_input = wx.TextCtrl(panel, size=(550, -1), value="自卑，容易犯小错误")
         
         setting_label = wx.StaticText(panel, label="设定：")
-        self.setting_input = wx.TextCtrl(panel, size=(550, -1))
+        # self.setting_input = wx.TextCtrl(panel, size=(550, -1))
+        self.setting_input = wx.TextCtrl(panel, size=(550, -1), value="少女，呆呆的，笨笨的，但很对待事情很用心")
         
         # 将组件添加到 sizer
         grid_sizer.AddMany([
@@ -77,23 +80,46 @@ class TextCtrl(wx.Frame):
         panel.SetSizer(main_sizer)
 
         # 窗口设置
-        self.SetSize(640, 500)
+        self.SetSize(1540, 800)
         self.SetTitle("Inspiration")
         self.Centre()
         self.Show(True)
 
     def start_thread(self):
+        # 检查是否选择功能菜单
+        selected_function = self.content_type.GetValue()
+        if not selected_function:  # 未选择功能
+            wx.MessageBox("请选择一个功能菜单！", "错误", wx.OK | wx.ICON_ERROR)
+            return
+        
+        # 根据功能选择设置提示词
+        if selected_function == "故事大纲":
+            self.text = "你是一个创意写作助手，请根据以下设定生成一个完整的故事大纲。大纲需要包含以下要素：\
+                        1. 故事背景（时间、地点、主要设定）。\
+                        2. 主要角色及其性格特点。\
+                        3. 故事的主要冲突或问题。\
+                        4. 故事的关键情节节点（包括开端、发展、高潮、结局）。\
+                        请确保大纲内容具体、条理清晰、富有创意，并能够为写作者提供清晰的方向。文章风格可根据设定进行调整，字数不少于300字。\
+                        （仅仅回复大纲，无需额外的文字）"
+                        
+        elif selected_function == "章节文本":
+            self.text = "你是一个专业写作助手，请根据下面的设定撰写故事的一个章节。\
+                        章节需包含生动的描述、细腻的情感刻画，以及扣人心弦的情节发展，\
+                        字数不少于500字。（仅仅回复章节文本，无需额外的文字）"
+
+        # 启动线程进行内容生成
         thread = threading.Thread(target=self.create_completion, args=())
         thread.start()
 
     def create_completion(self):
         self.generate_button.SetLabel("请等待...")
-        user_input = self.tex.GetValue()
 
         # 获取用户输入
         theme = self.theme_input.GetValue()
         character = self.character_input.GetValue()
         setting = self.setting_input.GetValue()
+
+        user_input = f"主题：{theme}\n角色：{character}\n设定：{setting}"
 
         # 构建 messages 列表
         messages = [
@@ -113,9 +139,11 @@ class TextCtrl(wx.Frame):
                 stream=True, # 启用流式响应
             )
 
-            self.turns.append(f"\n用户：{user_input}\n")
-            self.turns.append("\nAI：")
-            wx.CallAfter(self.result_text.SetValue, "".join(self.turns))  # 先显示用户的输入
+            self.turns.append(f"\n{user_input}\n")
+            self.turns.append("\n")
+            
+            # 显示用户的输入
+            # wx.CallAfter(self.result_text.SetValue, "".join(self.turns))  
 
             for chunk in completion:
                 delta = chunk.choices[0].delta
@@ -123,13 +151,14 @@ class TextCtrl(wx.Frame):
                     content = delta.content
                     for char in content:
                         self.turns[-1] += char
-                        wx.CallAfter(self.result_text.SetValue, "".join(self.turns))
+                        # wx.CallAfter(self.result_text.SetValue, "".join(self.turns))
+                        wx.CallAfter(self.result_text.SetValue, "".join(self.turns[-1]))
        
         except Exception as e:
             wx.CallAfter(self.result_text.SetValue, f"发生错误：{str(e)}")
 
         finally:
-            self.button.SetLabel("提交")
+            self.generate_button.SetLabel("修改？")
 
         # 仅保留最近的 10 条对话记录
         if len(self.turns) <= 10:
@@ -139,7 +168,7 @@ class TextCtrl(wx.Frame):
 
     # 输入内容为空时禁止提交（弹出提示）
     def on_generate(self, event):
-        if self.tex.GetValue() == "":
+        if self.theme_input.GetValue() == "" or self.character_input.GetValue() == "" or self.setting_input.GetValue() == "":
             toastone = wx.MessageDialog(None, "请输入内容", "提示", wx.YES_DEFAULT)
             if toastone.ShowModal() == wx.ID_YES:
                 toastone.Destroy()
