@@ -21,10 +21,15 @@ class TextCtrl(wx.Frame):
     def __init__(self, *args, **kwargs):
         super(TextCtrl, self).__init__(*args, **kwargs)
         self.init_ui()
+        
+        # 用于保存对话历史和 AI 回复
+        self.basetext = "" # 基本要求提示词
+        self.text = ""  # 对话历史(保留后10条)
+        self.turns = []  # 总对话历史
+        self.ai_respond = [] # ai 回复的内容
+        self.fix_flag = False   # 按钮按下,变为"修改"后生效
 
     def init_ui(self):
-        self.text = ""
-        self.turns = []
         panel = wx.Panel(self)
         self.panel = panel
         
@@ -33,16 +38,13 @@ class TextCtrl(wx.Frame):
         grid_sizer = wx.FlexGridSizer(rows=3, cols=2, vgap=10, hgap=10)
         
         theme_label = wx.StaticText(panel, label="主题：")
-        # self.theme_input = wx.TextCtrl(panel, size=(550, -1))
-        self.theme_input = wx.TextCtrl(panel, size=(550, -1), value="成长")
+        self.theme_input = wx.TextCtrl(panel, size=(550, -1))
         
         character_label = wx.StaticText(panel, label="性格：")
-        # self.character_input = wx.TextCtrl(panel, size=(550, -1))
-        self.character_input = wx.TextCtrl(panel, size=(550, -1), value="自卑，容易犯小错误")
+        self.character_input = wx.TextCtrl(panel, size=(550, -1))
         
         setting_label = wx.StaticText(panel, label="设定：")
-        # self.setting_input = wx.TextCtrl(panel, size=(550, -1))
-        self.setting_input = wx.TextCtrl(panel, size=(550, -1), value="少女，呆呆的，笨笨的，但很对待事情很用心")
+        self.setting_input = wx.TextCtrl(panel, size=(550, -1))
         
         # 将组件添加到 sizer
         grid_sizer.AddMany([
@@ -101,7 +103,7 @@ class TextCtrl(wx.Frame):
         
         # 根据功能选择设置提示词
         if selected_function == "故事大纲":
-            self.text = "你是一个创意写作助手，请根据以下设定生成一个完整的故事大纲。大纲需要包含以下要素：\
+            self.basetext = "你是一个创意写作助手，请根据以下设定生成一个完整的故事大纲。大纲需要包含以下要素：\
                         1. 故事背景（时间、地点、主要设定）。\
                         2. 主要角色及其性格特点。\
                         3. 故事的主要冲突或问题。\
@@ -110,7 +112,7 @@ class TextCtrl(wx.Frame):
                         （仅仅回复大纲，无需额外的文字）"
                         
         elif selected_function == "章节文本":
-            self.text = "你是一个专业写作助手，请根据下面的设定撰写故事的一个章节。\
+            self.basetext = "你是一个专业写作助手，请根据下面的设定撰写故事的一个章节。\
                         章节需包含生动的描述、细腻的情感刻画，以及扣人心弦的情节发展，\
                         字数不少于500字。（仅仅回复章节文本，无需额外的文字）"
 
@@ -122,12 +124,20 @@ class TextCtrl(wx.Frame):
         self.generate_button.SetLabel("请等待...")
 
         # 获取用户输入
-        theme = self.theme_input.GetValue()
-        character = self.character_input.GetValue()
-        setting = self.setting_input.GetValue()
+        if not self.fix_flag:
+            theme = self.theme_input.GetValue()
+            character = self.character_input.GetValue()
+            setting = self.setting_input.GetValue()
 
-        user_input = f"主题：{theme}\n角色：{character}\n设定：{setting}"
+            user_input = f"主题：{theme}\n角色：{character}\n设定：{setting}"
 
+        else:
+            fix_command = self.dynamic_input.GetValue()
+            user_input = f"请根据下面的要求进行修改(同样不要回复多余的话),要求: {fix_command}"
+            
+        self.text = self.basetext + self.text
+        print(self.text)
+        
         # 构建 messages 列表
         messages = [
             {"role": "system", "content": self.text},
@@ -146,28 +156,28 @@ class TextCtrl(wx.Frame):
                 stream=True, # 启用流式响应
             )
 
-            self.turns.append(f"\n{user_input}\n")
-            self.turns.append("\n")
-            
-            # 显示用户的输入
-            # wx.CallAfter(self.result_text.SetValue, "".join(self.turns))  
-
+            self.ai_respond.append("\n")
             for chunk in completion:
                 delta = chunk.choices[0].delta
                 if hasattr(delta, "content") and delta.content is not None:  # 判断属性和内容是否存在
                     content = delta.content
                     for char in content:
-                        self.turns[-1] += char
-                        # wx.CallAfter(self.result_text.SetValue, "".join(self.turns))
-                        wx.CallAfter(self.result_text.SetValue, "".join(self.turns[-1]))
-       
-        except Exception as e:
-            print("发生错误：{str(e)}")
-            # wx.CallAfter(self.result_text.SetValue, f"发生错误：{str(e)}")
+                        self.ai_respond[-1] += char
+                        
+                         # 实现实时逐字输出
+                        wx.CallAfter(self.result_text.SetValue, "".join(self.ai_respond)) 
+
+            self.ai_respond[-1] += "\n\n---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------\n\n"
             
+            self.turns.append(user_input)             # 保存本轮用户输入
+            self.turns.append(self.ai_respond[-1])    # 保存本轮ai回答
+
+        except Exception as e:
+            print("发生错误：{str(e)}")            
 
         finally:
             self.generate_button.SetLabel("修改")
+            self.fix_flag = True
             self.dynamic_input.SetValue("")  # 清空输入框
             
             # 显示动态输入框
@@ -180,20 +190,22 @@ class TextCtrl(wx.Frame):
             wx.CallAfter(self.panel.Layout)  
 
         # 仅保留最近的 10 条对话记录
-        if len(self.turns) <= 10:
+        if len(self.turns) <= 20:
             self.text = "".join(self.turns)
         else:
-            self.text = "".join(self.turns[-10:])
+            self.text = "".join(self.turns[-20:])
+
 
     # 输入内容为空时禁止提交（弹出提示）
     def on_generate(self, event):
+        # 三个设定有空的,弹出提示
         if self.theme_input.GetValue() == "" or self.character_input.GetValue() == "" or self.setting_input.GetValue() == "":
             toastone = wx.MessageDialog(None, "请输入内容", "提示", wx.YES_DEFAULT)
             if toastone.ShowModal() == wx.ID_YES:
                 toastone.Destroy()
             return
 
-        self.result_text.SetValue(self.text)
+        # self.result_text.SetValue(self.text)
         self.start_thread()
 
 
